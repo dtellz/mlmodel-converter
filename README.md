@@ -2,7 +2,9 @@
 
 A simple Python tool for converting Hugging Face NLP models into Apple's Core ML format (`.mlmodel`) for seamless integration into iOS/macOS apps, running inference on device.
 
-<img src="lg.png" alt="MLModel Converter Tool" width="300">
+<p align="center">
+  <img src="lg.png" alt="MLModel Converter Tool" width="300">
+</p>
 
 
 ---
