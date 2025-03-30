@@ -1,6 +1,6 @@
 # MLModel Converter Tool
 
-A simple Python tool for converting Hugging Face NLP models into Apple's Core ML format (`.mlmodel`) for seamless integration into iOS/macOS apps, running inference on device.
+A simple Python tool for converting Hugging Face NLP models into Apple's Core ML format (`.mlmodel` or `.mlpackage`) for seamless integration into iOS/macOS apps, running inference on device.
 
 <p align="center">
   <img src="lg.png" alt="MLModel Converter Tool" width="300">
@@ -41,11 +41,12 @@ uv run python main.py
 The cli will prompt you to enter the following parameters:
 
 - `model_name`: The Hugging Face model name to convert (e.g., 'sarahai/your-inspiration')
-- `output_filename`: The output Core ML model filename (without .mlmodel extension)
+- `file_extension`: The target file extension to use for the output Core ML model (mlmodel or mlpackage)
+- `output_filename`: The output Core ML model filename (without .mlmodel or .mlpackage extension)
 
 ### Output
 
-This generates a .mlmodel file in the project directory (e.g., `<output_filename>.mlmodel`) ready for integration into Xcode.
+This generates a .mlmodel or .mlpackage file in the project directory (e.g., `<output_filename>.mlmodel` or `<output_filename>.mlpackage`) ready for integration into Xcode.
 
 ### Integration into Xcode
 
