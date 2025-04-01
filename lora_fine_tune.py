@@ -21,6 +21,7 @@ def parse_args():
     parser.add_argument("--lora_dropout", type=float, default=0.05, help="LoRA dropout rate")
     parser.add_argument("--max_length", type=int, default=64, help="Maximum sequence length")
     parser.add_argument("--use_fp16", action="store_true", help="Use mixed precision training if available")
+    parser.add_argument("--force_device", action="store_true", help="Force device selection without confirmation")
     return parser.parse_args()
 
 class QuoteDataset(Dataset):
@@ -38,27 +39,56 @@ class QuoteDataset(Dataset):
 def load_and_prepare_model(args):
     print(f"Loading model: {args.model_id}")
     
-    # Detect device
-    if torch.cuda.is_available():
+    # Check model compatibility with available devices
+    model_family = args.model_id.split("/")[-1].lower()
+    
+    # Detect available devices
+    cuda_available = torch.cuda.is_available()
+    mps_available = torch.backends.mps.is_available()
+    
+    # Select device with appropriate warnings
+    if cuda_available:
         device = torch.device("cuda")
         print("Using CUDA device")
-    elif torch.backends.mps.is_available():
+    elif mps_available:
         device = torch.device("mps")
         print("Using Apple Silicon MPS device")
+        
+        # Warn about potential MPS limitations
+        print("Note: Some operations may not be fully optimized for MPS. If you encounter errors, try using CPU instead.")
     else:
         device = torch.device("cpu")
         print("Using CPU device")
+        print("Warning: Training on CPU will be significantly slower. Consider using a machine with GPU acceleration if possible.")
+    
+    # Check if the model is known to have issues with the selected device
+    problematic_models_mps = ["llama", "mistral"]
+    if device.type == "mps" and any(model in model_family for model in problematic_models_mps):
+        print(f"WARNING: The model '{args.model_id}' may have compatibility issues with Apple Silicon MPS.")
+        print("If you encounter errors, try adding the --use_cpu flag to force CPU execution.")
+        
+        # Optional: Add a confirmation step
+        if not getattr(args, "force_device", False):
+            response = input("Do you want to continue with MPS? (y/n, default: y): ").lower()
+            if response == "n":
+                print("Switching to CPU device")
+                device = torch.device("cpu")
     
     # Load model and move to device
-    model = AutoModelForCausalLM.from_pretrained(args.model_id)
-    model = model.to(device)
-    tokenizer = AutoTokenizer.from_pretrained(args.model_id)
-    
-    # Ensure the tokenizer has a padding token
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-    
-    return model, tokenizer, device
+    try:
+        model = AutoModelForCausalLM.from_pretrained(args.model_id)
+        model = model.to(device)
+        tokenizer = AutoTokenizer.from_pretrained(args.model_id)
+        
+        # Ensure the tokenizer has a padding token
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+            
+        return model, tokenizer, device
+    except Exception as e:
+        print(f"Error loading model: {e}")
+        print("If you're using MPS (Apple Silicon) and encountering errors, try using CPU instead.")
+        raise
 
 def load_dataset_and_prepare(tokenizer, args):
     print("Loading dataset...")

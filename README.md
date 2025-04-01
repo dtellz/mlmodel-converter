@@ -36,13 +36,41 @@ uv install
 uv run python main.py
 ```
 
-### Parameters
-
-The cli will prompt you to enter the following parameters:
+The CLI will prompt you to enter the following parameters:
 
 - `model_name`: The Hugging Face model name to convert (e.g., 'sarahai/your-inspiration')
 - `file_extension`: The target file extension to use for the output Core ML model (mlmodel or mlpackage)
 - `output_filename`: The output Core ML model filename (without .mlmodel or .mlpackage extension)
+
+### Fine-tuning with LoRA before conversion
+
+The tool now supports fine-tuning models using Low-Rank Adaptation (LoRA) before converting them to CoreML format. This is particularly useful for customizing models for specific tasks while keeping them small enough for mobile deployment.
+
+```bash
+uv run python lora_fine_tune.py --model_id distilgpt2 --num_train_epochs 3 --batch_size 4
+```
+
+#### Fine-tuning parameters
+
+- `--model_id`: The Hugging Face model ID to fine-tune (default: 'distilgpt2')
+- `--output_dir`: Directory to save training results (default: './results')
+- `--merged_model_dir`: Directory to save the merged model (default: './merged_model')
+- `--coreml_model_path`: Path to save the CoreML model (default: './Motivator.mlmodel')
+- `--num_train_epochs`: Number of training epochs (default: 3)
+- `--batch_size`: Training batch size (default: 4)
+- `--lora_r`: LoRA attention dimension (default: 8)
+- `--lora_alpha`: LoRA alpha parameter (default: 16)
+- `--lora_dropout`: LoRA dropout rate (default: 0.05)
+- `--max_length`: Maximum sequence length (default: 64)
+
+The script will:
+1. Load the specified model
+2. Fine-tune it on a dataset of motivational quotes using LoRA
+3. Merge the LoRA weights with the base model
+4. Convert the fine-tuned model to CoreML format
+5. Test the converted model with a sample input
+
+This feature is optimized for Apple Silicon (M-series chips) and produces models ready for iOS deployment.
 
 ### Output
 
