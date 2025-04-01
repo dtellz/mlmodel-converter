@@ -13,6 +13,10 @@ A simple Python tool for converting Hugging Face NLP models into Apple's Core ML
 
 This converter allows you to quickly transform pre-trained Hugging Face models (such as GPT-2 for text generation) into Core ML models suitable for on-device inference on Apple devices.
 
+## Roadmap
+
+Check out our [project roadmap](ROADMAP.md) for upcoming features and development plans. Interested in contributing to any of these features? We welcome your help! See the [Contributing](#contributing) section below or open an issue to discuss your ideas.
+
 ## Prerequisites
 
 - Python 3.12+
@@ -87,4 +91,3 @@ Contributions are welcome! Please open an issue or submit a pull request.
 ## License
 
 [MIT](https://choosealicense.com/licenses/mit/) @ [dtellz](https://github.com/dtellz)
- 
