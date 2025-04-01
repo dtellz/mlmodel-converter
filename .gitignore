@@ -1,3 +1,5 @@
 .venv
 *.mlmodel
 *.mlpackage
+merged_model/
+results/
