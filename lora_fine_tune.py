@@ -7,6 +7,7 @@ import coremltools as ct
 import os
 import argparse
 import re
+import numpy as np
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Fine-tune a language model with LoRA and convert to CoreML")
@@ -175,26 +176,43 @@ def merge_lora_weights(model, args):
 
 def convert_to_coreml(model, tokenizer, args, device):
     print("Converting to CoreML format...")
-    model.eval()  # Set model to evaluation mode
     
-    # Move model to CPU for conversion
+    # Explicitly move model to CPU for CoreML conversion
     model = model.to("cpu")
     
-    # Prepare example input for tracing
+    # Create a wrapped model similar to main.py
+    class WrappedModel(torch.nn.Module):
+        def __init__(self, model):
+            super().__init__()
+            self.model = model
+            
+        def forward(self, input_ids):
+            outputs = self.model(input_ids=input_ids, return_dict=False)
+            return outputs[0]  # Return logits
+    
+    # Wrap the model
+    wrapped_model = WrappedModel(model)
+    wrapped_model.eval()
+    
+    # Prepare example input for tracing (on CPU)
     example_text = "Believe in yourself!"
-    example_input = tokenizer(example_text, return_tensors="pt")["input_ids"]
+    example_input = tokenizer(example_text, return_tensors="pt")["input_ids"].to("cpu")
     
     # Trace the model
     print("Tracing model...")
-    traced_model = torch.jit.trace(model, example_input)
+    with torch.no_grad():
+        traced_model = torch.jit.trace(wrapped_model, example_input)
     
-    # Convert to CoreML
-    print("Converting to CoreML...")
+    # Define input shape with dynamic sequence length
+    input_shape = ct.Shape(shape=(1, ct.RangeDim(1, args.max_length)))
+    
+    # Convert to CoreML (using .mlmodel format)
+    print("Converting to CoreML format (.mlmodel)...")
     mlmodel = ct.convert(
         traced_model,
-        inputs=[ct.TensorType(name="input_ids", shape=example_input.shape)],
-        convert_to="mlprogram",
-        compute_units=ct.ComputeUnit.ALL,  # Use all available compute units
+        inputs=[ct.TensorType(name="input_ids", shape=input_shape, dtype=np.int32)],
+        convert_to="neuralnetwork",  # Force legacy format for .mlmodel
+        compute_units=ct.ComputeUnit.ALL,
     )
     
     # Add metadata for better iOS integration
@@ -207,6 +225,50 @@ def convert_to_coreml(model, tokenizer, args, device):
     mlmodel.save(args.coreml_model_path)
     
     return mlmodel
+
+def test_coreml_model(args):
+    """Test the converted CoreML model with a sample input."""
+    print("\n=== Testing CoreML Model ===")
+    
+    import coremltools as ct
+    import torch
+    from transformers import AutoTokenizer
+    
+    # Load tokenizer
+    tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
+    tokenizer.pad_token = tokenizer.eos_token  # Just in case
+    
+    # Prepare input
+    text = "The future belongs to those who"
+    print(f"Input text: '{text}'")
+    input_ids = tokenizer(text, return_tensors="pt")["input_ids"]
+    
+    # Load Core ML model
+    print(f"Loading CoreML model from {args.coreml_model_path}")
+    mlmodel = ct.models.MLModel(args.coreml_model_path)
+    
+    # Run prediction
+    print("Running prediction...")
+    coreml_input = {"input_ids": input_ids.numpy()}
+    output = mlmodel.predict(coreml_input)
+    
+    # Process output
+    print("\nRaw output:")
+    print(output)
+    
+    # Get the most likely next tokens
+    logits = output['var_1133']  # This key might be different depending on the model
+    
+    # Get top 5 next tokens
+    print("\nTop 5 next tokens:")
+    last_token_logits = logits[0, -1, :]
+    top_indices = np.argsort(last_token_logits)[-5:][::-1]
+    
+    for idx in top_indices:
+        token = tokenizer.decode([idx])
+        print(f"  - '{token}' (score: {last_token_logits[idx]:.2f})")
+    
+    print("\nCoreML model test completed!\n")
 
 def main():
     args = parse_args()
@@ -231,6 +293,9 @@ def main():
     
     # Convert to CoreML
     convert_to_coreml(merged_model, tokenizer, args, device)
+    
+    # Test the converted model
+    test_coreml_model(args)
     
     print("Process completed successfully!")
 
