@@ -1,12 +1,11 @@
 from transformers import AutoModelForCausalLM, AutoTokenizer, TrainingArguments, Trainer
 from datasets import load_dataset
-from peft import get_peft_model, LoraConfig, TaskType, PeftModel
+from peft import get_peft_model, LoraConfig, TaskType
 import torch
 from torch.utils.data import Dataset
 import coremltools as ct
 import os
 import argparse
-import re
 import numpy as np
 
 def parse_args():
@@ -231,7 +230,6 @@ def test_coreml_model(args):
     print("\n=== Testing CoreML Model ===")
     
     import coremltools as ct
-    import torch
     from transformers import AutoTokenizer
     
     # Load tokenizer
@@ -247,26 +245,68 @@ def test_coreml_model(args):
     print(f"Loading CoreML model from {args.coreml_model_path}")
     mlmodel = ct.models.MLModel(args.coreml_model_path)
     
+    # Print model input description
+    print("\nModel input description:")
+    print(mlmodel.input_description)
+    
+    # Convert input to the right format (int32 numpy array)
+    input_array = input_ids.numpy().astype(np.int32)
+    print(f"Input shape: {input_array.shape}, dtype: {input_array.dtype}")
+    
     # Run prediction
     print("Running prediction...")
-    coreml_input = {"input_ids": input_ids.numpy()}
-    output = mlmodel.predict(coreml_input)
+    try:
+        # Try with dictionary input
+        coreml_input = {"input_ids": input_array}
+        output = mlmodel.predict(coreml_input)
+        print("Prediction successful with dictionary input!")
+    except Exception as e:
+        print(f"Dictionary input failed: {e}")
+        try:
+            # Try with direct array input
+            output = mlmodel.predict(input_array)
+            print("Prediction successful with direct array input!")
+        except Exception as e:
+            print(f"Direct array input failed: {e}")
+            try:
+                # Get the actual input name from the model
+                input_name = list(mlmodel.input_description.keys())[0]
+                print(f"Trying with model's input name: {input_name}")
+                coreml_input = {input_name: input_array}
+                output = mlmodel.predict(coreml_input)
+                print(f"Prediction successful with input name '{input_name}'!")
+            except Exception as e:
+                print(f"Named input failed: {e}")
+                print("\nModel conversion was successful, but runtime prediction failed.")
+                print("You may need to use the model directly in your iOS app.")
+                return
     
-    # Process output
-    print("\nRaw output:")
-    print(output)
+    # Process output if prediction was successful
+    print("\nRaw output keys:")
+    for key in output:
+        print(f"  - {key}: shape {output[key].shape if hasattr(output[key], 'shape') else 'N/A'}")
     
-    # Get the most likely next tokens
-    logits = output['var_1133']  # This key might be different depending on the model
+    # Try to get the logits from the output
+    logits_key = None
+    for key in output:
+        if isinstance(output[key], np.ndarray) and len(output[key].shape) == 3:
+            logits_key = key
+            break
     
-    # Get top 5 next tokens
-    print("\nTop 5 next tokens:")
-    last_token_logits = logits[0, -1, :]
-    top_indices = np.argsort(last_token_logits)[-5:][::-1]
-    
-    for idx in top_indices:
-        token = tokenizer.decode([idx])
-        print(f"  - '{token}' (score: {last_token_logits[idx]:.2f})")
+    if logits_key:
+        print(f"\nUsing output key: {logits_key}")
+        logits = output[logits_key]
+        
+        # Get top 5 next tokens
+        print("\nTop 5 next tokens:")
+        last_token_logits = logits[0, -1, :]
+        top_indices = np.argsort(last_token_logits)[-5:][::-1]
+        
+        for idx in top_indices:
+            token = tokenizer.decode([idx])
+            print(f"  - '{token}' (score: {last_token_logits[idx]:.2f})")
+    else:
+        print("\nCouldn't identify logits in the output. Model structure may be different than expected.")
     
     print("\nCoreML model test completed!\n")
 
